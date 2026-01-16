@@ -22,8 +22,12 @@ local M = {}
 
 ---Select from all `opencode.nvim` functionality.
 ---
---- - Fetches custom commands from `opencode`.
---- - Highlights and previews items when using `snacks.picker`.
+--- - Prompts
+--- - Commands
+---   - Fetches custom commands from `opencode`
+--- - Provider controls
+---
+--- Highlights and previews items when using `snacks.picker`.
 ---
 ---@param opts? opencode.select.Opts Override configured options for this call.
 function M.select(opts)

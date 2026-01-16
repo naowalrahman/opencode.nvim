@@ -14,8 +14,8 @@ vim.g.opencode_opts = vim.g.opencode_opts
 ---@class opencode.Opts
 ---
 ---The port `opencode` is running on.
----If `nil`, searches for an `opencode` process inside Neovim's CWD (requires `lsof` to be installed on your system).
----If set, `opencode.nvim` will append `--port <port>` to `provider.cmd` if not already present.
+---If `nil`, searches for an `opencode` process inside Neovim's CWD.
+---If set, `opencode.nvim` will append `--port <port>` to `provider.cmd`.
 ---@field port? number
 ---
 ---Contexts to inject into prompts, keyed by their placeholder.
