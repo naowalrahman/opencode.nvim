@@ -19,36 +19,31 @@ end
 
 ---@return opencode.cli.server.Process[]
 local function get_processes_unix()
-  assert(vim.fn.executable("pgrep") == 1, "`pgrep` executable not found")
-  assert(vim.fn.executable("lsof") == 1, "`lsof` executable not found")
   -- Find PIDs by command line pattern.
   -- We filter for `--port` to avoid matching other `opencode`-related processes (LSPs etc.)
-  -- Using vim.system avoids shell injection risks and quoting issues.
   local pgrep = vim.system({ "pgrep", "-f", "opencode.*--port" }, { text = true }):wait()
-  if pgrep.code ~= 0 or not pgrep.stdout or pgrep.stdout == "" then
-    return {}
-  end
+  require("opencode.util").check_system_call(pgrep, "pgrep")
+
   local processes = {}
   for pgrep_line in pgrep.stdout:gmatch("[^\r\n]+") do
     local pid = tonumber(pgrep_line)
     if pid then
-      -- lsof to find the listening port for this PID
+      -- Get the port for the PID
       local lsof = vim
         .system({ "lsof", "-w", "-iTCP", "-sTCP:LISTEN", "-P", "-n", "-a", "-p", tostring(pid) }, { text = true })
         :wait()
-      if lsof.code == 0 and lsof.stdout then
-        for line in lsof.stdout:gmatch("[^\r\n]+") do
-          local parts = vim.split(line, "%s+")
-          if parts[1] ~= "COMMAND" then -- Skip header
-            local port_str = parts[9] and parts[9]:match(":(%d+)$") -- e.g. "127.0.0.1:12345" -> "12345"
-            if port_str then
-              local port = tonumber(port_str)
-              if port then
-                table.insert(processes, {
-                  pid = pid,
-                  port = port,
-                })
-              end
+      require("opencode.util").check_system_call(lsof, "lsof")
+      for line in lsof.stdout:gmatch("[^\r\n]+") do
+        local parts = vim.split(line, "%s+")
+        if parts[1] ~= "COMMAND" then -- Skip header
+          local port_str = parts[9] and parts[9]:match(":(%d+)$") -- e.g. "127.0.0.1:12345" -> "12345"
+          if port_str then
+            local port = tonumber(port_str)
+            if port then
+              table.insert(processes, {
+                pid = pid,
+                port = port,
+              })
             end
           end
         end
@@ -71,15 +66,13 @@ ForEach-Object {
   }
 } | ConvertTo-Json -Compress
 ]]
-  local ps_result = vim.system({ "powershell", "-NoProfile", "-Command", ps_script }):wait()
-  if ps_result.code ~= 0 then
-    error("powershell failed with " .. ps_result.code .. "\nstderr:\n" .. (ps_result.stderr or ""), 0)
-  end
-  if not ps_result.stdout or ps_result.stdout == "" then
+  local ps = vim.system({ "powershell", "-NoProfile", "-Command", ps_script }):wait()
+  require("opencode.util").check_system_call(ps, "PowerShell")
+  if ps.stdout == "" then
     return {}
   end
   -- The Powershell script should return the response as JSON to ease parsing.
-  local ok, processes = pcall(vim.fn.json_decode, ps_result.stdout)
+  local ok, processes = pcall(vim.fn.json_decode, ps.stdout)
   if not ok then
     error("Failed to parse PowerShell output: " .. tostring(processes), 0)
   end
@@ -123,16 +116,13 @@ local function find_servers()
 end
 
 local function is_descendant_of_neovim(pid)
-  assert(vim.fn.executable("ps") == 1, "`ps` executable not found")
   local neovim_pid = vim.fn.getpid()
   local current_pid = pid
   -- Walk up because the way some shells launch processes,
   -- Neovim will not be the direct parent.
   for _ = 1, 10 do -- limit to 10 steps to avoid infinite loop
     local ps = vim.system({ "ps", "-o", "ppid=", "-p", tostring(current_pid) }, { text = true }):wait()
-    if ps.code ~= 0 or not ps.stdout then
-      return false
-    end
+    require("opencode.util").check_system_call(ps, "ps")
     local parent_pid = tonumber(ps.stdout)
     if not parent_pid then
       return false

@@ -233,8 +233,6 @@ end
 ---@param port number
 ---@return opencode.cli.client.PathResponse
 function M.get_path(port)
-  assert(vim.fn.executable("curl") == 1, "`curl` executable not found")
-
   -- Query each port synchronously for working directory
   -- TODO: Migrate to align with async paradigm used elsewhere
   local curl_result = vim
@@ -246,15 +244,14 @@ function M.get_path(port)
       "http://localhost:" .. port .. "/path",
     })
     :wait()
+  require("opencode.util").check_system_call(curl_result, "curl")
 
-  if curl_result.code == 0 and curl_result.stdout and curl_result.stdout ~= "" then
-    local path_ok, path_data = pcall(vim.fn.json_decode, curl_result.stdout)
-    if path_ok and (path_data.directory or path_data.worktree) then
-      return path_data
-    end
+  local path_ok, path_data = pcall(vim.fn.json_decode, curl_result.stdout)
+  if path_ok and (path_data.directory or path_data.worktree) then
+    return path_data
+  else
+    error("Failed to parse `opencode` CWD data: " .. curl_result.stdout, 0)
   end
-
-  error("Failed to get working directory for `opencode` port: " .. port, 0)
 end
 
 ---@class opencode.cli.client.Event

@@ -385,9 +385,9 @@ end
 
 ---The git diff (unified diff format).
 function Context:git_diff()
-  -- Use vim.system instead of io.popen for safety and better error handling
   local result = vim.system({ "git", "--no-pager", "diff" }, { text = true }):wait()
-  if result.code ~= 0 or not result.stdout or result.stdout == "" then
+  require("opencode.util").check_system_call(result, "git diff")
+  if result.stdout == "" then
     return nil
   end
   return result.stdout
