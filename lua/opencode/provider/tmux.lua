@@ -13,6 +13,25 @@ Tmux.name = "tmux"
 ---
 ---`tmux` options for creating the pane.
 ---@field options? string
+---
+---Focus the opencode pane when created. Default: `false`
+---@field focus? boolean
+--
+---Allow `allow-passthrough` on the opencode pane.
+-- When enabled, opencode.nvim will use your configured tmux `allow-passthrough` option on its pane.
+-- This allows opencode to use OSC escape sequences, but may leak escape codes to the buffer
+-- (e.g., "=31337;OK" appearing in your buffer).
+--
+-- Limitations of having allow-passthrough disabled in the opencode pane:
+-- - can't display images
+-- - can't use special (terminal specific; non-system) clipboards
+-- - may have issues setting window properties like the title from the pane
+--
+-- If you enable this, consider also enabling `focus` to auto-focus the pane on creation,
+-- which can help avoid OSC code leakage while opencode is sending escape sequences on startup.
+--
+-- Default: `false` (allow-passthrough is disabled to prevent OSC code leakage)
+---@field allow_passthrough? boolean
 
 ---@param opts? opencode.provider.tmux.Opts
 ---@return opencode.provider.Tmux
@@ -74,8 +93,14 @@ function Tmux:start()
   local pane_id = self:get_pane_id()
   if not pane_id then
     -- Create new pane
-    self.pane_id =
-      vim.fn.system(string.format("tmux split-window -d -P -F '#{pane_id}' %s '%s'", self.opts.options, self.cmd))
+    local detach_flag = self.opts.focus and "" or "-d"
+    self.pane_id = vim.fn.system(
+      string.format("tmux split-window %s -P -F '#{pane_id}' %s '%s'", detach_flag, self.opts.options or "", self.cmd)
+    )
+    local disable_passthrough = self.opts.allow_passthrough ~= true -- default true (disable passthrough)
+    if disable_passthrough and self.pane_id and self.pane_id ~= "" then
+      vim.fn.system(string.format("tmux set-option -t %s -p allow-passthrough off", vim.trim(self.pane_id)))
+    end
   end
 end
 
