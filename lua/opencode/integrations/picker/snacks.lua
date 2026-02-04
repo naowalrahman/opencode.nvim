@@ -25,6 +25,9 @@ function M.opencode_send(picker)
       entries[#entries + 1] = entry
     end
   end
+  if #entries == 0 then
+    return
+  end
   require("opencode").prompt(table.concat(entries, "\n") .. "\n")
 end
 
