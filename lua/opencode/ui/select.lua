@@ -19,6 +19,8 @@ local M = {}
 ---Whether to show the provider section.
 ---Always `false` if no provider is available.
 ---@field provider? boolean
+---
+---@field server? boolean Whether to show server controls.
 
 ---Select from all `opencode.nvim` functionality.
 ---
@@ -26,6 +28,7 @@ local M = {}
 --- - Commands
 ---   - Fetches custom commands from `opencode`
 --- - Provider controls
+--- - Server controls
 ---
 --- Highlights and previews items when using `snacks.picker`.
 ---
@@ -38,12 +41,16 @@ function M.select(opts)
 
   -- TODO: Should merge with prompts' optional contexts
   local context = require("opencode.context").new()
+  local Promise = require("opencode.promise")
 
   require("opencode.cli.server")
-    .get_port()
-    :next(function(port)
+    .get()
+    :next(function(server) ---@param server opencode.cli.server.Server
+      return server.port
+    end)
+    :next(function(port) ---@param port number
       if opts.sections.prompts then
-        return require("opencode.promise").new(function(resolve)
+        return Promise.new(function(resolve)
           require("opencode.cli.client").get_agents(port, function(agents)
             context.agents = vim.tbl_filter(function(agent)
               return agent.mode == "subagent"
@@ -56,9 +63,9 @@ function M.select(opts)
         return port
       end
     end)
-    :next(function(port)
+    :next(function(port) ---@param port number
       if opts.sections.commands then
-        return require("opencode.promise").new(function(resolve)
+        return Promise.new(function(resolve)
           require("opencode.cli.client").get_commands(port, function(custom_commands)
             resolve(custom_commands)
           end)
@@ -67,14 +74,16 @@ function M.select(opts)
         return {}
       end
     end)
-    :next(function(custom_commands)
+    :next(function(custom_commands) ---@param custom_commands opencode.cli.client.Command[]
       local prompts = require("opencode.config").opts.prompts or {}
       local commands = require("opencode.config").opts.select.sections.commands or {}
       for _, command in ipairs(custom_commands) do
         commands[command.name] = command.description
       end
 
-      ---@type snacks.picker.finder.Item[]
+      ---@class opencode.select.Item : snacks.picker.finder.Item, { __type: "prompt" | "command" | "provider", ask?: boolean, submit?: boolean }
+
+      ---@type opencode.select.Item[]
       local items = {}
 
       -- Prompts section
@@ -166,6 +175,18 @@ function M.select(opts)
         })
       end
 
+      -- Server section
+      if opts.sections.server then
+        table.insert(items, { __group = true, name = "SERVER", preview = { text = "" } })
+        table.insert(items, {
+          __type = "server",
+          name = "select",
+          text = "Select server",
+          highlights = { { "Select server", "Comment" } },
+          preview = { text = "" },
+        })
+      end
+
       for i, item in ipairs(items) do
         item.idx = i -- Store the index for non-snacks formatting
       end
@@ -203,42 +224,46 @@ function M.select(opts)
       }
       select_opts = vim.tbl_deep_extend("force", select_opts, opts)
 
-      vim.ui.select(items, select_opts, function(choice)
-        if not choice then
-          context:resume()
-          return
+      return Promise.select(items, select_opts)
+    end)
+    :next(function(choice) ---@param choice opencode.select.Item
+      if choice.__type == "prompt" then
+        ---@type opencode.Prompt
+        local prompt = require("opencode.config").opts.prompts[choice.name]
+        prompt.context = context
+        if prompt.ask then
+          -- Early return so the context doesn't get cleared yet
+          return require("opencode").ask(prompt.prompt, prompt)
         else
-          context:clear()
+          require("opencode").prompt(prompt.prompt, prompt)
         end
+      elseif choice.__type == "command" then
+        if choice.name == "session.select" then
+          require("opencode").select_session()
+        else
+          require("opencode").command(choice.name)
+        end
+      elseif choice.__type == "provider" then
+        if choice.name == "toggle" then
+          require("opencode").toggle()
+        elseif choice.name == "start" then
+          require("opencode").start()
+        elseif choice.name == "stop" then
+          require("opencode").stop()
+        end
+      elseif choice.__type == "server" then
+        if choice.name == "select" then
+          require("opencode").select_server()
+        end
+      end
 
-        if choice.__type == "prompt" then
-          ---@type opencode.Prompt
-          local prompt = require("opencode.config").opts.prompts[choice.name]
-          prompt.context = context
-          if prompt.ask then
-            require("opencode").ask(prompt.prompt, prompt)
-          else
-            require("opencode").prompt(prompt.prompt, prompt)
-          end
-        elseif choice.__type == "command" then
-          if choice.name == "session.select" then
-            require("opencode").select_session()
-          else
-            require("opencode").command(choice.name)
-          end
-        elseif choice.__type == "provider" then
-          if choice.name == "toggle" then
-            require("opencode").toggle()
-          elseif choice.name == "start" then
-            require("opencode").start()
-          elseif choice.name == "stop" then
-            require("opencode").stop()
-          end
-        end
-      end)
+      context:clear()
     end)
     :catch(function(err)
-      vim.notify(err, vim.log.levels.ERROR)
+      if err then
+        vim.notify(err, vim.log.levels.ERROR)
+      end
+      context:resume()
     end)
 end
 

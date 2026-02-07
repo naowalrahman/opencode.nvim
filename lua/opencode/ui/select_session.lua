@@ -12,15 +12,18 @@ end
 
 function M.select_session()
   require("opencode.cli.server")
-    .get_port()
-    :next(function(port)
+    .get()
+    :next(function(server) ---@param server opencode.cli.server.Server
+      return server.port
+    end)
+    :next(function(port) ---@param port number
       return require("opencode.promise").new(function(resolve)
         require("opencode.cli.client").get_sessions(port, function(sessions)
           resolve({ sessions = sessions, port = port })
         end)
       end)
     end)
-    :next(function(session_data)
+    :next(function(session_data) ---@param session_data {sessions: opencode.cli.client.Session[], port: number}
       local sessions = session_data.sessions
       table.sort(sessions, function(a, b)
         return a.time.updated > b.time.updated
@@ -34,7 +37,7 @@ function M.select_session()
           local title = ellipsize(item.title, title_length)
           return ("%s%s%s"):format(title, string.rep(" ", title_length - #title), updated)
         end,
-      }, function(choice)
+      }, function(choice) ---@param choice? opencode.cli.client.Session
         if choice then
           require("opencode.cli.client").select_session(session_data.port, choice.id)
         end

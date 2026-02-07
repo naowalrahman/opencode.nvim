@@ -71,7 +71,6 @@ function M.toggle()
   local provider = require("opencode.config").provider
   if provider and provider.toggle then
     provider:toggle()
-    require("opencode.events").subscribe()
   else
     error("`provider.toggle` unavailable — run `:checkhealth opencode` for details", 0)
   end
@@ -81,8 +80,10 @@ end
 function M.start()
   local provider = require("opencode.config").provider
   if provider and provider.start then
+    -- TODO: Subscribe immediately.
+    -- Ideally, providers expose the PID of the process they started.
+    -- Then we decompose server.lua code to go PID -> port (OS dependent... windows impl combines this with the PID step currently) -> server -> connect.
     provider:start()
-    require("opencode.events").subscribe()
   else
     error("`provider.start` unavailable — run `:checkhealth opencode` for details", 0)
   end
@@ -93,7 +94,7 @@ function M.stop()
   local provider = require("opencode.config").provider
   if provider and provider.stop then
     provider:stop()
-    require("opencode.events").unsubscribe()
+    require("opencode.events").disconnect()
   else
     error("`provider.stop` unavailable — run `:checkhealth opencode` for details", 0)
   end

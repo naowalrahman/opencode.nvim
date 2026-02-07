@@ -26,6 +26,8 @@ local M = {}
 function M.ask(default, opts)
   opts = opts or {}
   opts.context = opts.context or require("opencode.context").new()
+  require("opencode.cmp.blink").context = opts.context
+  local Promise = require("opencode.promise")
 
   ---@type snacks.input.Opts
   local input_opts = {
@@ -69,9 +71,12 @@ function M.ask(default, opts)
   input_opts = vim.tbl_deep_extend("force", input_opts, require("opencode.config").opts.ask.snacks)
 
   require("opencode.cli.server")
-    .get_port()
-    :next(function(port)
-      return require("opencode.promise").new(function(resolve)
+    .get()
+    :next(function(server) ---@param server opencode.cli.server.Server
+      return server.port
+    end)
+    :next(function(port) ---@param port number
+      return Promise.new(function(resolve)
         require("opencode.cli.client").get_agents(port, function(agents)
           opts.context.agents = vim.tbl_filter(function(agent)
             return agent.mode == "subagent"
@@ -82,19 +87,17 @@ function M.ask(default, opts)
       end)
     end)
     :next(function()
-      require("opencode.cmp.blink").context = opts.context
-
-      vim.ui.input(input_opts, function(value)
-        if value and value ~= "" then
-          opts.context:clear()
-          require("opencode").prompt(value, opts)
-        else
-          opts.context:resume()
-        end
-      end)
+      return Promise.input(input_opts)
+    end)
+    :next(function(input) ---@param input string
+      require("opencode").prompt(input, opts)
+      opts.context:clear()
     end)
     :catch(function(err)
-      vim.notify(err, vim.log.levels.ERROR)
+      if err then
+        vim.notify(err, vim.log.levels.ERROR)
+      end
+      opts.context:resume()
     end)
 end
 
