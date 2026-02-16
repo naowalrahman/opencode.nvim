@@ -48,7 +48,7 @@ Integrate the [opencode](https://github.com/sst/opencode) AI assistant with Neov
           },
         },
         -- Enables the `snacks` provider.
-        terminal = {}
+        terminal = {},
       }
     },
   },
