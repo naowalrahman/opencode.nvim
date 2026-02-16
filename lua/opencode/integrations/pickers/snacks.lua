@@ -2,7 +2,8 @@
 
 local M = {}
 
----Send selected picker items to `opencode`.
+---Send the selected or current `snacks.picker` items to `opencode`,
+---Formats items' file and position if possible, otherwise falls back to their text content.
 ---@param picker snacks.Picker
 function M.send(picker)
   local items = vim.tbl_map(function(item)
